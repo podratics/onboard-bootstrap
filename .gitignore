@@ -1,0 +1,10 @@
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor noise
+.vscode/*.log
+*.swp
+
+# Local notes (never commit)
+NOTES.local.md
