@@ -1,9 +1,5 @@
 # Podratic new-starter bootstrap (Windows / PowerShell).
 #
-# This script is intentionally minimal. Its only job is to get the new starter
-# onto a known baseline (bun + gh, authenticated) and then hand off to the
-# Bun/TypeScript CLI in `podratics/onboard` which does the actual setup work.
-#
 # Usage:
 #   irm https://raw.githubusercontent.com/podratics/onboard-bootstrap/master/install.ps1 | iex
 #
