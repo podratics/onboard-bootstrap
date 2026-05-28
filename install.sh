@@ -189,24 +189,29 @@ ensure_git() {
 
 # ----- GitHub auth + org gate ----------------------------------------------
 
-# Run `gh auth login` if the user is not already authenticated.
+# Run `gh auth login` if the user is not already authenticated. Always wire
+# gh up as git's credential helper afterwards so `git pull` / `git push` in
+# the cloned repo work without prompting for a password (GitHub no longer
+# accepts password auth for git operations).
 ensure_gh_auth() {
   if gh auth status >/dev/null 2>&1; then
     log_ok "GitHub CLI already authenticated as $(gh api user --jq .login)"
-    return 0
+  else
+    log_step "Authenticating with GitHub (device flow via browser)"
+    # Scopes:
+    #   read:org         verify podratics org membership (the access gate)
+    #   repo             clone private podratics repos
+    #   workflow         common engineering tasks (gh workflow run, etc.)
+    #   admin:public_key upload the operator's SSH public key from git-identity step
+    gh auth login \
+      --hostname github.com \
+      --git-protocol https \
+      --scopes "read:org,repo,workflow,admin:public_key" \
+      --web
   fi
 
-  log_step "Authenticating with GitHub (device flow via browser)"
-  # Scopes:
-  #   read:org         verify podratics org membership (the access gate)
-  #   repo             clone private podratics repos
-  #   workflow         common engineering tasks (gh workflow run, etc.)
-  #   admin:public_key upload the operator's SSH public key from git-identity step
-  gh auth login \
-    --hostname github.com \
-    --git-protocol https \
-    --scopes "read:org,repo,workflow,admin:public_key" \
-    --web
+  # Idempotent: configures git's credential.helper for github.com to use gh.
+  gh auth setup-git --hostname github.com
 }
 
 # Refuse to proceed unless the authenticated user is a member of the
