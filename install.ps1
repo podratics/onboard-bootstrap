@@ -108,11 +108,15 @@ function Initialize-GhAuth {
   }
 
   Write-Step 'Authenticating with GitHub (device flow via browser)'
-  # `read:org` is required so we can verify org membership against podratics.
+  # Scopes:
+  #   read:org         verify podratics org membership (the access gate)
+  #   repo             clone private podratics repos
+  #   workflow         common engineering tasks (gh workflow run, etc.)
+  #   admin:public_key upload the operator's SSH public key from git-identity step
   & gh auth login `
     --hostname github.com `
     --git-protocol https `
-    --scopes 'read:org,repo,workflow' `
+    --scopes 'read:org,repo,workflow,admin:public_key' `
     --web
   if ($LASTEXITCODE -ne 0) {
     throw 'gh auth login failed.'
