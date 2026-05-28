@@ -242,7 +242,11 @@ clone_and_run_onboard() {
   ( cd "${ONBOARD_DIR}" && bun install )
 
   log_step "Handing off to onboard CLI"
-  ( cd "${ONBOARD_DIR}" && bun run start )
+  # Redirect stdin from /dev/tty so the onboard CLI's interactive prompts work
+  # even when this script was invoked via `curl ... | bash`, which leaves
+  # stdin attached to the curl pipe (non-TTY) and breaks raw-mode keystroke
+  # readers like the `prompts` library.
+  ( cd "${ONBOARD_DIR}" && bun run start < /dev/tty )
 }
 
 # ----- main -----------------------------------------------------------------
