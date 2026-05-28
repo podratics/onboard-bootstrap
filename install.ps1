@@ -98,28 +98,36 @@ function Install-IfMissing {
 
 # ----- GitHub auth + org gate ----------------------------------------------
 
-# Run `gh auth login` if the user is not already authenticated.
+# Run `gh auth login` if the user is not already authenticated. Always wire
+# gh up as git's credential helper afterwards so `git pull` / `git push` in
+# the cloned repo work without prompting for a password (GitHub no longer
+# accepts password auth for git operations).
 function Initialize-GhAuth {
   $status = & gh auth status 2>&1
   if ($LASTEXITCODE -eq 0) {
     $login = (& gh api user --jq .login).Trim()
     Write-Ok "GitHub CLI already authenticated as $login"
-    return
+  } else {
+    Write-Step 'Authenticating with GitHub (device flow via browser)'
+    # Scopes:
+    #   read:org         verify podratics org membership (the access gate)
+    #   repo             clone private podratics repos
+    #   workflow         common engineering tasks (gh workflow run, etc.)
+    #   admin:public_key upload the operator's SSH public key from git-identity step
+    & gh auth login `
+      --hostname github.com `
+      --git-protocol https `
+      --scopes 'read:org,repo,workflow,admin:public_key' `
+      --web
+    if ($LASTEXITCODE -ne 0) {
+      throw 'gh auth login failed.'
+    }
   }
 
-  Write-Step 'Authenticating with GitHub (device flow via browser)'
-  # Scopes:
-  #   read:org         verify podratics org membership (the access gate)
-  #   repo             clone private podratics repos
-  #   workflow         common engineering tasks (gh workflow run, etc.)
-  #   admin:public_key upload the operator's SSH public key from git-identity step
-  & gh auth login `
-    --hostname github.com `
-    --git-protocol https `
-    --scopes 'read:org,repo,workflow,admin:public_key' `
-    --web
+  # Idempotent: configures git's credential.helper for github.com to use gh.
+  & gh auth setup-git --hostname github.com
   if ($LASTEXITCODE -ne 0) {
-    throw 'gh auth login failed.'
+    throw 'gh auth setup-git failed.'
   }
 }
 
