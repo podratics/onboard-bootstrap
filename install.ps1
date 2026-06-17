@@ -158,6 +158,7 @@ function Invoke-OnboardCli {
   $gitDir = Join-Path $Script:OnboardDir '.git'
   if (Test-Path $gitDir) {
     Write-Ok "onboard already cloned at $Script:OnboardDir; pulling latest"
+    & git -C $Script:OnboardDir checkout master
     & git -C $Script:OnboardDir pull --ff-only
   } else {
     & gh repo clone $Script:OnboardRepo $Script:OnboardDir
