@@ -242,6 +242,7 @@ clone_and_run_onboard() {
 
   if [ -d "${ONBOARD_DIR}/.git" ]; then
     log_ok "onboard already cloned at ${ONBOARD_DIR}; pulling latest"
+    git -C "${ONBOARD_DIR}" checkout master
     git -C "${ONBOARD_DIR}" pull --ff-only
   else
     gh repo clone "${ONBOARD_REPO}" "${ONBOARD_DIR}"
