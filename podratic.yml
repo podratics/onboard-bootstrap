@@ -1,0 +1,9 @@
+# podratic.yml - repository metadata for the Podratic Hub (see the hub repo's docs/podratic-yml.md).
+version: 1
+title: onboard-bootstrap
+kind: tooling
+summary: Public bootstrap install scripts piped into a new starter's shell; hands off to the private onboard CLI.
+owner: engineering
+lifecycle: production
+dependsOn:
+  - onboard
