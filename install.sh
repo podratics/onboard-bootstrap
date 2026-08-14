@@ -30,14 +30,12 @@ readonly ONBOARD_DIR="${WORKSPACE_DIR}/onboard"
 if [ -t 1 ]; then
   readonly C_BLUE=$'\033[34m'
   readonly C_GREEN=$'\033[32m'
-  readonly C_YELLOW=$'\033[33m'
   readonly C_RED=$'\033[31m'
   readonly C_DIM=$'\033[2m'
   readonly C_RESET=$'\033[0m'
 else
   readonly C_BLUE=""
   readonly C_GREEN=""
-  readonly C_YELLOW=""
   readonly C_RED=""
   readonly C_DIM=""
   readonly C_RESET=""
@@ -45,7 +43,6 @@ fi
 
 log_info()  { printf "%s[onboard]%s %s\n" "${C_BLUE}"   "${C_RESET}" "$*"; }
 log_ok()    { printf "%s[ ok   ]%s %s\n" "${C_GREEN}"  "${C_RESET}" "$*"; }
-log_warn()  { printf "%s[ warn ]%s %s\n" "${C_YELLOW}" "${C_RESET}" "$*"; }
 log_error() { printf "%s[error ]%s %s\n" "${C_RED}"    "${C_RESET}" "$*" >&2; }
 log_step()  { printf "\n%s>>>%s %s\n" "${C_DIM}" "${C_RESET}" "$*"; }
 
@@ -94,9 +91,7 @@ ensure_platform_package_manager() {
   fi
 
   log_step "Installing Homebrew"
-  # The official Homebrew installer. Pinning is impractical here because the
-  # canonical install URL is itself the source of truth; the alternative is
-  # vendoring the installer, which would drift.
+  # The official Homebrew installer, run from its canonical URL.
   /bin/bash -c \
     "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
@@ -190,9 +185,9 @@ ensure_git() {
 # ----- GitHub auth + org gate ----------------------------------------------
 
 # Run `gh auth login` if the user is not already authenticated. Always wire
-# gh up as git's credential helper afterwards so `git pull` / `git push` in
-# the cloned repo work without prompting for a password (GitHub no longer
-# accepts password auth for git operations).
+# gh up as git's credential helper afterwards. GitHub requires a token for git
+# operations. The helper supplies one, so `git pull` and `git push` in the
+# cloned repo run without a prompt.
 ensure_gh_auth() {
   if gh auth status >/dev/null 2>&1; then
     log_ok "GitHub CLI already authenticated as $(gh api user --jq .login)"
@@ -249,7 +244,10 @@ clone_and_run_onboard() {
   fi
 
   log_step "Installing onboard CLI dependencies"
-  ( cd "${ONBOARD_DIR}" && bun install )
+  # Install runtime dependencies only. The CLI runs from source, so it needs no
+  # development dependencies. Some of those need credentials that the CLI itself
+  # configures later in this run.
+  ( cd "${ONBOARD_DIR}" && bun install --production )
 
   log_step "Handing off to onboard CLI"
   # Redirect stdin from /dev/tty so the onboard CLI's interactive prompts work
