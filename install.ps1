@@ -9,11 +9,11 @@
 #     install packages, and the onboard CLI refuses to run without one.
 #
 # Safety:
-#   - `$ErrorActionPreference = 'Stop'` so any PowerShell error aborts the
-#     script. It does not cover native exit codes, so `Invoke-Native` throws on
-#     an unexpected one. Calls that branch on an exit code do so explicitly.
-#   - Verifies podratics org membership before cloning any private code.
-#   - Never writes secrets to disk; auth is delegated to `gh auth login`.
+#   - `$ErrorActionPreference = 'Stop'`, so any PowerShell error stops the script. It does not
+#     cover a native exit code, so `Invoke-Native` throws on an unexpected one. A call that
+#     branches on an exit code says so.
+#   - The script verifies podratics org membership before it clones private code.
+#   - The script writes no secrets to disk. `gh auth login` handles authentication.
 
 $ErrorActionPreference = 'Stop'
 
@@ -33,8 +33,8 @@ function Write-Step  { param([string]$Message) Write-Host "`n>>> $Message" -Fore
 
 # ----- privilege check ------------------------------------------------------
 
-# Returns $true if the current PowerShell session is running with
-# Administrator rights. Chocolatey and the onboard CLI both need them.
+# Returns $true if the current PowerShell session has Administrator rights. Chocolatey and the
+# onboard CLI both need them.
 function Test-IsAdmin {
   $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
   $principal = New-Object System.Security.Principal.WindowsPrincipal($identity)
@@ -43,9 +43,9 @@ function Test-IsAdmin {
 
 # ----- native command invocation --------------------------------------------
 
-# Run a native executable and throw $FailureMessage if it exits with a code
-# outside $AllowedExitCodes. PowerShell's $ErrorActionPreference does not apply
-# to native exit codes, so a native failure is otherwise silent.
+# Run a native executable and throw $FailureMessage if it exits with a code outside
+# $AllowedExitCodes. PowerShell's $ErrorActionPreference does not apply to a native exit code, so a
+# native failure without this check is silent.
 function Invoke-Native {
   param(
     [Parameter(Mandatory=$true)][string]$Executable,
@@ -62,9 +62,9 @@ function Invoke-Native {
 
 # ----- PATH refresh ---------------------------------------------------------
 
-# After installing a tool, the new shim is on the machine PATH but not in
-# this process's environment. Pull the machine + user PATH into $env:Path so
-# subsequent commands in this session can find the freshly installed tool.
+# After a tool installs, its shim is on the machine PATH but not in this process's environment.
+# Copy the machine PATH and the user PATH into $env:Path, so a later command in this session finds
+# the new tool.
 function Update-SessionPath {
   $machinePath = [System.Environment]::GetEnvironmentVariable('Path', 'Machine')
   $userPath    = [System.Environment]::GetEnvironmentVariable('Path', 'User')
@@ -73,8 +73,7 @@ function Update-SessionPath {
 
 # ----- prerequisite installation -------------------------------------------
 
-# Install Chocolatey if it is not already on PATH. `Invoke-Main` has already
-# confirmed that this session has Administrator rights.
+# Install Chocolatey if it is not on PATH. `Invoke-Main` confirms Administrator rights first.
 function Install-Chocolatey {
   if (Get-Command choco -ErrorAction SilentlyContinue) {
     Write-Ok 'Chocolatey already installed'
@@ -93,7 +92,7 @@ function Install-Chocolatey {
   Update-SessionPath
 }
 
-# Install a package via Chocolatey unless the command is already available.
+# Install a package through Chocolatey, unless the command is already available.
 function Install-IfMissing {
   param(
     [Parameter(Mandatory=$true)][string]$Command,
@@ -107,8 +106,8 @@ function Install-IfMissing {
   }
 
   Write-Step "Installing $DisplayName"
-  # Chocolatey reports a pending or initiated reboot with exit code 3010 or
-  # 1641. The package still installed, so treat both as success.
+  # Chocolatey reports a pending or started reboot with exit code 3010 or 1641. The package still
+  # installed, so both codes count as success.
   # https://docs.chocolatey.org/en-us/choco/commands/install
   Invoke-Native -Executable 'choco' -Arguments @('install', '-y', $ChocoPackage) `
     -AllowedExitCodes @(0, 1641, 3010) `
@@ -118,13 +117,12 @@ function Install-IfMissing {
 
 # ----- GitHub auth + org gate ----------------------------------------------
 
-# Run `gh auth login` if the user is not already authenticated. Always wire
-# gh up as git's credential helper afterwards. GitHub requires a token for git
-# operations. The helper supplies one, so `git pull` and `git push` in the
-# cloned repo run without a prompt.
+# Run `gh auth login` if the user is not authenticated yet, then always set gh as git's credential
+# helper. GitHub requires a token for a git operation. The helper supplies one, so `git pull` and
+# `git push` in the cloned repo run without a prompt.
 function Initialize-GhAuth {
-  # A non-zero exit code here means the user has not authenticated yet.
-  # This call branches on the exit code rather than throwing.
+  # A non-zero exit code here means the user has not authenticated yet, so this call branches on the
+  # exit code instead of throwing.
   & gh auth status 2>&1 | Out-Null
   if ($LASTEXITCODE -eq 0) {
     $login = (& gh api user --jq .login).Trim()
@@ -145,19 +143,19 @@ function Initialize-GhAuth {
     ) -FailureMessage 'gh auth login failed.'
   }
 
-  # Idempotent: configures git's credential.helper for github.com to use gh.
+  # This command is idempotent. It sets git's credential.helper for github.com to gh.
   Invoke-Native -Executable 'gh' -Arguments @('auth', 'setup-git', '--hostname', 'github.com') `
     -FailureMessage 'gh auth setup-git failed.'
 }
 
-# Refuse to proceed unless the authenticated user is a member of the
-# `podratics` GitHub organization. This is the access control gate.
+# Stop unless the authenticated user is a member of the `podratics` GitHub organization. This check
+# is the access gate.
 function Confirm-OrgMembership {
   Write-Step 'Verifying podratics organization membership'
   $login = (& gh api user --jq .login).Trim()
 
-  # A non-zero exit code here means the user is not a member.
-  # This call branches on the exit code rather than throwing.
+  # A non-zero exit code here means the user is not a member, so this call branches on the exit code
+  # instead of throwing.
   & gh api -H 'Accept: application/vnd.github+json' "/orgs/$Script:OnboardOrg/members/$login" 2>$null | Out-Null
   if ($LASTEXITCODE -eq 0) {
     Write-Ok "$login is a member of $Script:OnboardOrg"
@@ -191,9 +189,8 @@ function Invoke-OnboardCli {
   Write-Step 'Installing onboard CLI dependencies'
   Push-Location $Script:OnboardDir
   try {
-    # Install runtime dependencies only. The CLI runs from source, so it needs
-    # no development dependencies. Some of those need credentials that the CLI
-    # itself configures later in this run.
+    # Install runtime dependencies only. The CLI runs from source, so it needs no development
+    # dependencies. Some of those need credentials that the CLI configures later in this run.
     Invoke-Native -Executable 'bun' -Arguments @('install', '--production') `
       -FailureMessage 'bun install failed.'
 
@@ -210,13 +207,12 @@ function Invoke-OnboardCli {
 function Invoke-Main {
   Write-Info 'Podratic new-starter bootstrap starting'
 
-  # Check for Administrator rights first. Chocolatey needs them to install
-  # packages, and the onboard CLI exits immediately without them. Without this
-  # check a machine that already has Chocolatey passes every gate here, then
-  # fails at the handoff.
+  # Check for Administrator rights first. Chocolatey needs them to install a package, and the
+  # onboard CLI exits without them. A machine that already has Chocolatey passes every later check
+  # and then fails at the handoff.
   if (-not (Test-IsAdmin)) {
     Write-Err 'This bootstrap needs an elevated PowerShell session.'
-    Write-Err 'Right-click PowerShell -> Run as Administrator, then re-run this script.'
+    Write-Err 'Right-click PowerShell, select Run as Administrator, then run this script again.'
     exit 1
   }
 

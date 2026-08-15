@@ -11,9 +11,9 @@
 #   - Arch / Manjaro (pacman)
 #
 # Safety:
-#   - `set -euo pipefail` so any failure aborts the script.
-#   - Verifies podratics org membership before cloning any private code.
-#   - Never writes secrets to disk; auth is delegated to `gh auth login`.
+#   - `set -euo pipefail`, so any failure stops the script.
+#   - The script verifies podratics org membership before it clones private code.
+#   - The script writes no secrets to disk. `gh auth login` handles authentication.
 
 set -euo pipefail
 
@@ -26,7 +26,7 @@ readonly ONBOARD_DIR="${WORKSPACE_DIR}/onboard"
 
 # ----- logging --------------------------------------------------------------
 
-# ANSI escapes (only when stdout is a TTY). Use plain output when piped.
+# ANSI escapes, set only when stdout is a TTY. Piped output stays plain.
 if [ -t 1 ]; then
   readonly C_BLUE=$'\033[34m'
   readonly C_GREEN=$'\033[32m'
@@ -79,7 +79,7 @@ detect_platform() {
 
 # ----- prerequisite installation -------------------------------------------
 
-# Install Homebrew on macOS if missing. Linux distros already have apt/pacman.
+# Install Homebrew on macOS if it is absent. A Linux distribution already has apt or pacman.
 ensure_platform_package_manager() {
   if [ "${PLATFORM_KIND}" != "macos" ]; then
     return 0
@@ -91,12 +91,12 @@ ensure_platform_package_manager() {
   fi
 
   log_step "Installing Homebrew"
-  # The official Homebrew installer, run from its canonical URL.
+  # The official Homebrew installer, run from its own URL.
   /bin/bash -c \
     "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-  # Homebrew on Apple Silicon installs to /opt/homebrew; on Intel to /usr/local.
-  # Newly installed shells will not yet have it on PATH for this session.
+  # Homebrew installs to /opt/homebrew on Apple Silicon and to /usr/local on Intel. The current
+  # shell does not have it on PATH yet.
   if [ -x /opt/homebrew/bin/brew ]; then
     eval "$(/opt/homebrew/bin/brew shellenv)"
   elif [ -x /usr/local/bin/brew ]; then
@@ -149,7 +149,7 @@ ensure_bun() {
       brew install oven-sh/bun/bun
       ;;
     linux-debian|linux-arch)
-      # Official Bun installer drops the binary into ~/.bun/bin.
+      # The official Bun installer puts the binary in ~/.bun/bin.
       sudo apt-get install -y unzip 2>/dev/null || sudo pacman -Sy --noconfirm unzip 2>/dev/null || true
       curl -fsSL https://bun.sh/install | bash
       export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
@@ -158,8 +158,8 @@ ensure_bun() {
   esac
 }
 
-# Install git if missing. On macOS we rely on Xcode CLT prompting; on Linux
-# we install explicitly.
+# Install git if it is absent. On macOS the Xcode Command Line Tools installer prompts for it. On
+# Linux this script installs it.
 ensure_git() {
   if command -v git >/dev/null 2>&1; then
     log_ok "git already installed ($(git --version))"
@@ -184,10 +184,9 @@ ensure_git() {
 
 # ----- GitHub auth + org gate ----------------------------------------------
 
-# Run `gh auth login` if the user is not already authenticated. Always wire
-# gh up as git's credential helper afterwards. GitHub requires a token for git
-# operations. The helper supplies one, so `git pull` and `git push` in the
-# cloned repo run without a prompt.
+# Run `gh auth login` if the user is not authenticated yet, then always set gh as git's credential
+# helper. GitHub requires a token for a git operation. The helper supplies one, so `git pull` and
+# `git push` in the cloned repo run without a prompt.
 ensure_gh_auth() {
   if gh auth status >/dev/null 2>&1; then
     log_ok "GitHub CLI already authenticated as $(gh api user --jq .login)"
@@ -205,13 +204,12 @@ ensure_gh_auth() {
       --web
   fi
 
-  # Idempotent: configures git's credential.helper for github.com to use gh.
+  # This command is idempotent. It sets git's credential.helper for github.com to gh.
   gh auth setup-git --hostname github.com
 }
 
-# Refuse to proceed unless the authenticated user is a member of the
-# `podratics` GitHub organization. This is the access control gate: someone
-# who is not on the team cannot pull the private onboard repository.
+# Stop unless the authenticated user is a member of the `podratics` GitHub organization. This check
+# is the access gate: a person outside the organization cannot clone the private onboard repository.
 verify_org_membership() {
   log_step "Verifying podratics organization membership"
   local login
@@ -244,16 +242,14 @@ clone_and_run_onboard() {
   fi
 
   log_step "Installing onboard CLI dependencies"
-  # Install runtime dependencies only. The CLI runs from source, so it needs no
-  # development dependencies. Some of those need credentials that the CLI itself
-  # configures later in this run.
+  # Install runtime dependencies only. The CLI runs from source, so it needs no development
+  # dependencies. Some of those need credentials that the CLI configures later in this run.
   ( cd "${ONBOARD_DIR}" && bun install --production )
 
   log_step "Handing off to onboard CLI"
-  # Redirect stdin from /dev/tty so the onboard CLI's interactive prompts work
-  # even when this script was invoked via `curl ... | bash`, which leaves
-  # stdin attached to the curl pipe (non-TTY) and breaks raw-mode keystroke
-  # readers like the `prompts` library.
+  # Redirect stdin from /dev/tty so the onboard CLI's prompts work. A `curl ... | bash` invocation
+  # leaves stdin attached to the curl pipe, which is not a TTY. A raw-mode keystroke reader such as
+  # the `prompts` library then fails.
   ( cd "${ONBOARD_DIR}" && bun run start < /dev/tty )
 }
 
